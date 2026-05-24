@@ -1,0 +1,231 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <link rel="stylesheet" href="/style.css" />
+    <title>FlowBoard</title>
+  </head>
+  <body>
+    <main>
+      <nav>
+        <div class="left">
+          <span class="brand">FlowBoard</span>
+          <% if (roomRole) { %>
+          <span class="role-pill role-<%= roomRole %>"><%= roomRole === 'boss' ? 'Flow Boss' : roomRole === 'rider' ? 'Flow Rider' : 'Flow Watcher' %></span>
+          <% } %>
+          <% if (room) { %>
+          <span class="room-pill"><%= room.name %></span>
+          <span id="livePresence" class="live-pill">Live 0</span>
+          <% } %>
+        </div>
+        <div class="right">
+          <% if (!room || roomRole === 'boss') { %>
+          <button id="crewBtn" data-crew-mode="<%= room ? 'monitor' : 'deploy' %>"><%= room ? 'Monitor Crew' : 'Deploy Crew' %></button>
+          <% } %>
+          <% if (room && roomRole === 'watcher') { %>
+          <button id="addTaskBtn" disabled>View Only</button>
+          <% } else { %>
+          <button id="addTaskBtn">Add New Task</button>
+          <% } %>
+          <button id="logoutBtn" style="margin-left: var(--padding-m)">
+            Logout
+          </button>
+        </div>
+      </nav>
+
+      <section class="board">
+
+      <!-- Crew Room Modal -->
+      <div id="crewRoomModal" class="modal" style="display: none">
+        <div class="modal-content modal-crew-room">
+          <div class="modal-header">
+            <h2>Deploy Crew</h2>
+            <button class="close-btn" id="crewRoomCloseBtn">&times;</button>
+          </div>
+          <form id="crewRoomForm">
+            <div class="form-group">
+              <label for="crewRoomNameInput">Crew Name *</label>
+              <input
+                type="text"
+                id="crewRoomNameInput"
+                required
+                placeholder="Enter crew name"
+              />
+            </div>
+            <div class="modal-footer">
+              <button type="button" class="btn-cancel" id="crewRoomCancelBtn">Cancel</button>
+              <button type="submit" class="btn-save">Deploy Crew</button>
+            </div>
+          </form>
+        </div>
+      </div>
+        <div id="todo" class="task-column">
+          <div class="heading">
+            <div class="left">To Do</div>
+            <div class="right"><span class="count">0</span></div>
+          </div>
+          <div class="tasks"></div>
+        </div>
+
+        <div id="progress" class="task-column">
+          <div class="heading">
+            <div class="left">In Progress</div>
+            <div class="right"><span class="count">0</span></div>
+          </div>
+          <div class="tasks"></div>
+        </div>
+
+        <div id="done" class="task-column">
+          <div class="heading">
+            <div class="left">Done</div>
+            <div class="right"><span class="count">0</span></div>
+          </div>
+          <div class="tasks"></div>
+        </div>
+      </section>
+    </main>
+
+    <div id="realtimeToast" class="realtime-toast" aria-live="polite"></div>
+
+    <!-- Task Modal -->
+    <div id="taskModal" class="modal" style="display: none">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h2 id="modalTitle">Add New Task</h2>
+          <button class="close-btn" id="taskCloseBtn">&times;</button>
+        </div>
+        <form id="taskForm">
+          <div class="form-group">
+            <label for="taskTitle">Task Title *</label>
+            <input
+              type="text"
+              id="taskTitle"
+              required
+              placeholder="Enter task title"
+            />
+          </div>
+          <div class="form-group">
+            <label for="taskDescription">Description</label>
+            <textarea
+              id="taskDescription"
+              placeholder="Enter task description"
+              rows="4"
+            ></textarea>
+          </div>
+          <div class="modal-footer">
+            <button type="button" class="btn-cancel">Cancel</button>
+            <button type="submit" class="btn-save">Save Task</button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <!-- Lineage Modal -->
+    <div id="lineageModal" class="modal" style="display: none">
+      <div class="modal-content modal-lineage">
+        <div class="modal-header">
+          <h2 id="lineageTitle">Task Lineage</h2>
+          <button class="close-btn" id="lineageCloseBtn">&times;</button>
+        </div>
+        <div class="lineage-shell">
+          <div id="lineageSummary" class="lineage-summary"></div>
+          <div id="lineageList" class="lineage-list"></div>
+          <div class="lineage-footer">
+            <button type="button" class="btn-cancel" id="lineageCancelBtn">Close</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Flow Crew Modal -->
+    <div id="crewModal" class="modal" style="display: none">
+      <div class="modal-content modal-crew">
+        <div class="modal-header">
+          <h2>Flow Crew</h2>
+          <button class="close-btn" id="crewCloseBtn">&times;</button>
+        </div>
+        <div class="crew-shell">
+          <div class="crew-meta">
+            <div>
+              <span class="crew-label">Room</span>
+              <strong id="crewRoomName"><%= room ? room.name : 'No Room Deployed' %></strong>
+            </div>
+            <div>
+              <span class="crew-label">Invite</span>
+              <code id="inviteCode"><%= room ? room.roomCode : '' %></code>
+            </div>
+            <div>
+              <span class="crew-label">Invite Link</span>
+              <div class="crew-invite-row">
+                <input id="inviteLink" readonly value="<%= inviteUrl || '' %>" />
+                <button type="button" class="crew-action-btn" id="copyInviteBtn">Copy</button>
+              </div>
+            </div>
+            <div>
+              <span class="crew-label">Members</span>
+              <strong id="memberTotal">0</strong>
+            </div>
+            <div>
+              <span class="crew-label">Current Role</span>
+              <strong id="currentRoleLabel"><%= roomRole ? (roomRole === 'boss' ? 'Flow Boss' : roomRole === 'rider' ? 'Flow Rider' : 'Flow Watcher') : 'Unassigned' %></strong>
+            </div>
+          </div>
+
+          <div id="crewStatus" class="crew-status" aria-live="polite"></div>
+
+          <div class="crew-groups">
+            <section class="crew-group">
+              <div class="crew-group-header">
+                <h3>Flow Boss</h3>
+                <span class="crew-group-count" id="bossCount">0</span>
+              </div>
+              <div id="bossCrewList" class="crew-list"></div>
+            </section>
+
+            <section class="crew-group">
+              <div class="crew-group-header">
+                <h3>Flow Riders</h3>
+                <span class="crew-group-count" id="riderCount">0</span>
+              </div>
+              <div id="riderCrewList" class="crew-list"></div>
+            </section>
+
+            <section class="crew-group">
+              <div class="crew-group-header">
+                <h3>Flow Watchers</h3>
+                <span class="crew-group-count" id="watcherCount">0</span>
+              </div>
+              <div id="watcherCrewList" class="crew-list"></div>
+            </section>
+          </div>
+
+          <div class="crew-footer">
+            <% if (room && roomRole === 'boss') { %>
+            <button type="button" class="crew-action-btn crew-action-remove" id="deleteRoomBtn">Delete Room</button>
+            <% } %>
+            <button type="button" class="btn-cancel" id="crewCancelBtn">Close</button>
+            <button type="button" class="btn-save" id="deployCrewBtn">Deploy Changes</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <script id="flowboard-data" type="application/json">
+      <%- JSON.stringify({
+        room: room ? { id: room._id, name: room.name, roomCode: room.roomCode } : null,
+        roomRole: roomRole || null,
+        invitePath: invitePath || null,
+        inviteUrl: inviteUrl || null,
+      }) %>
+    </script>
+    <script>
+      window.__FLOWBOARD__ = JSON.parse(
+        document.getElementById('flowboard-data')?.textContent || '{}',
+      );
+    </script>
+
+    <script src="/socket.io/socket.io.js"></script>
+    <script src="/script.js"></script>
+  </body>
+</html>

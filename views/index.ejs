@@ -3,6 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
     <link rel="stylesheet" href="/style.css" />
     <title>FlowBoard</title>
   </head>
@@ -11,12 +12,16 @@
       <nav>
         <div class="left">
           <span class="brand">FlowBoard</span>
-          <% if (roomRole) { %>
-          <span class="role-pill role-<%= roomRole %>"><%= roomRole === 'boss' ? 'Flow Boss' : roomRole === 'rider' ? 'Flow Rider' : 'Flow Watcher' %></span>
-          <% } %>
+        </div>
+        <div class="center">
           <% if (room) { %>
-          <span class="room-pill"><%= room.name %></span>
-          <span id="livePresence" class="live-pill">Live 0</span>
+          <div class="room-identity">
+            <span id="roomDisplayName" class="room-display-name"><%= room.name %></span>
+            <div class="presence-indicator">
+              <span id="presenceDot" class="presence-dot" aria-hidden="true"></span>
+              <span id="livePresence" class="presence-count">0 online</span>
+            </div>
+          </div>
           <% } %>
         </div>
         <div class="right">
@@ -45,8 +50,8 @@
           </div>
           <form id="crewRoomForm">
             <div class="form-group">
-              <label for="crewRoomNameInput">Crew Name *</label>
-              <input
+              <label for="crewRoomNameInput" style="margin-left: 7px;margin-top: 3px;padding-top: 3px;">Crew Name</label>
+              <input style="margin-left: 5px;margin-right: 5px;margin-top: 5px;"
                 type="text"
                 id="crewRoomNameInput"
                 required
@@ -65,15 +70,15 @@
             <div class="left">To Do</div>
             <div class="right"><span class="count">0</span></div>
           </div>
-          <div class="tasks"></div>
+          <div class="tasks" style="padding-top: 7px;"></div>
         </div>
 
         <div id="progress" class="task-column">
           <div class="heading">
-            <div class="left">In Progress</div>
+            <div class="left" >In Progress</div>
             <div class="right"><span class="count">0</span></div>
           </div>
-          <div class="tasks"></div>
+          <div class="tasks" style="padding-top: 7px;"></div>
         </div>
 
         <div id="done" class="task-column">
@@ -81,7 +86,7 @@
             <div class="left">Done</div>
             <div class="right"><span class="count">0</span></div>
           </div>
-          <div class="tasks"></div>
+          <div class="tasks" style="padding-top: 7px;"></div>
         </div>
       </section>
     </main>
@@ -151,53 +156,32 @@
               <span class="crew-label">Room</span>
               <strong id="crewRoomName"><%= room ? room.name : 'No Room Deployed' %></strong>
             </div>
-            <div>
-              <span class="crew-label">Invite</span>
-              <code id="inviteCode"><%= room ? room.roomCode : '' %></code>
-            </div>
-            <div>
-              <span class="crew-label">Invite Link</span>
-              <div class="crew-invite-row">
-                <input id="inviteLink" readonly value="<%= inviteUrl || '' %>" />
-                <button type="button" class="crew-action-btn" id="copyInviteBtn">Copy</button>
+              <div>
+                <span class="crew-label">Invite Link</span>
+                <div class="crew-invite-row">
+                  <input id="inviteLink" readonly value="<%= inviteUrl || '' %>" />
+                  <button type="button" class="crew-action-btn" id="copyInviteBtn">Copy</button>
+                </div>
+              </div>
+              <div>
+                <span class="crew-label">Members</span>
+                <strong id="memberTotal">0</strong>
+              </div>
+              <div>
+                <span class="crew-label">Current Role</span>
+                <strong id="currentRoleLabel"><%= roomRole ? (roomRole === 'boss' ? 'Flow Boss' : roomRole === 'rider' ? 'Flow Rider' : 'Flow Watcher') : 'Unassigned' %></strong>
               </div>
             </div>
-            <div>
-              <span class="crew-label">Members</span>
-              <strong id="memberTotal">0</strong>
-            </div>
-            <div>
-              <span class="crew-label">Current Role</span>
-              <strong id="currentRoleLabel"><%= roomRole ? (roomRole === 'boss' ? 'Flow Boss' : roomRole === 'rider' ? 'Flow Rider' : 'Flow Watcher') : 'Unassigned' %></strong>
-            </div>
-          </div>
 
           <div id="crewStatus" class="crew-status" aria-live="polite"></div>
 
-          <div class="crew-groups">
-            <section class="crew-group">
-              <div class="crew-group-header">
-                <h3>Flow Boss</h3>
-                <span class="crew-group-count" id="bossCount">0</span>
-              </div>
-              <div id="bossCrewList" class="crew-list"></div>
-            </section>
-
-            <section class="crew-group">
-              <div class="crew-group-header">
-                <h3>Flow Riders</h3>
-                <span class="crew-group-count" id="riderCount">0</span>
-              </div>
-              <div id="riderCrewList" class="crew-list"></div>
-            </section>
-
-            <section class="crew-group">
-              <div class="crew-group-header">
-                <h3>Flow Watchers</h3>
-                <span class="crew-group-count" id="watcherCount">0</span>
-              </div>
-              <div id="watcherCrewList" class="crew-list"></div>
-            </section>
+          <div class="crew-table">
+            <div class="crew-table-header">
+              <span>Names</span>
+              <span>Current Role</span>
+              <span>Powers</span>
+            </div>
+            <div id="crewMembersList" class="crew-table-body"></div>
           </div>
 
           <div class="crew-footer">

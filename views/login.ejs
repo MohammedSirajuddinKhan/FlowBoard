@@ -1,125 +1,18 @@
 <!DOCTYPE html>
 <html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <link rel="stylesheet" href="/style.css" />
-    <title>FlowBoard - Login</title>
-    <style>
-      body {
-        display: flex;
-        justify-content: center;
-        align-items: center;
-        min-height: 100vh;
-      }
-
-      main {
-        height: auto;
-        width: 100%;
-        max-width: 400px;
-        padding: 1rem;
-      }
-
-      nav {
-        margin-bottom: 2rem;
-        text-align: center;
-      }
-
-      section {
-        padding: 0;
-        flex-direction: column;
-      }
-
-      .auth-form {
-        display: flex;
-        flex-direction: column;
-        gap: 1rem;
-      }
-
-      .auth-form h2 {
-        margin-bottom: 1rem;
-        font-size: 1.5rem;
-      }
-
-      .form-group {
-        display: flex;
-        flex-direction: column;
-        gap: 0.5rem;
-      }
-
-      .form-group label {
-        font-size: 0.9rem;
-        color: var(--primary-text-color);
-      }
-
-      .form-group input {
-        padding: var(--padding-m) var(--padding-l);
-        background-color: var(--bg-task-color);
-        border: 1px solid #444;
-        border-radius: var(--border-radius-m);
-        color: var(--primary-text-color);
-        font-size: 1rem;
-      }
-
-      .form-group input:focus {
-        outline: none;
-        border-color: #666;
-        background-color: #333;
-      }
-
-      .auth-form button {
-        padding: var(--padding-m) var(--padding-l);
-        background-color: var(--bg-btn-clr);
-        border: 1px solid #444;
-        border-radius: var(--border-radius-m);
-        color: var(--primary-text-color);
-        cursor: pointer;
-        font-size: 1rem;
-        transition: all 0.3s ease;
-      }
-
-      .auth-form button:hover {
-        background-color: #333;
-        border-color: #666;
-      }
-
-      .auth-link {
-        text-align: center;
-        font-size: 0.9rem;
-        color: #888;
-      }
-
-      .auth-link a {
-        color: #bbb;
-        text-decoration: none;
-      }
-
-      .auth-link a:hover {
-        text-decoration: underline;
-      }
-
-      .alert {
-        padding: var(--padding-l);
-        border-radius: var(--border-radius-m);
-        margin-bottom: 1rem;
-        font-size: 0.9rem;
-      }
-
-      .alert-error {
-        background-color: #3a1a1a;
-        color: #ff6b6b;
-        border: 1px solid #662222;
-      }
-    </style>
+<head>
+      <meta charset="UTF-8" />
+      <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+      <title>FlowBoard</title>
+      <link rel="icon" type="image/x-icon" href="/favicon.svg" />
+      <link rel="stylesheet" href="style.css">
   </head>
   <body>
     <main>
-      <nav>
-        <div class="left" style="font-size: 1.5rem; margin: 0">FlowBoard</div>
-      </nav>
+      
 
       <section>
-        <form class="auth-form" id="loginForm">
+        <form class="auth-form-login" id="loginForm">
           <h2>Login to FlowBoard</h2>
 
           <div id="errorContainer"></div>
@@ -135,7 +28,7 @@
             />
           </div>
 
-          <div class="form-group">
+          <div class="form-group" style="margin-bottom: 2vh;">
             <label for="password">Password</label>
             <input
               type="password"
@@ -148,13 +41,12 @@
 
           <button type="submit">Login</button>
 
-          <div class="auth-link">
+          <div class="auth-link" style="padding-bottom: 3vh;padding-top: 2vh;">
             Don't have an account? <a href="/register">Register here</a>
           </div>
         </form>
       </section>
     </main>
-
     <script>
       const form = document.getElementById("loginForm");
       const errorContainer = document.getElementById("errorContainer");
@@ -177,6 +69,7 @@
         const password = document.getElementById("password").value;
 
         try {
+          if (window.Loader && typeof window.Loader.show === 'function') window.Loader.show();
           const response = await fetch("/api/auth/login", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
@@ -186,13 +79,19 @@
           const data = await response.json();
 
           if (!response.ok) {
+            if (window.Loader && typeof window.Loader.hide === 'function') window.Loader.hide();
             errorContainer.innerHTML = `<div class="alert alert-error">${data.error}</div>`;
             return;
           }
 
+          // ensure loader remains visible for a short moment to avoid flicker
+          if (window.Loader && typeof window.Loader.hide === 'function') {
+            setTimeout(() => window.Loader.hide(), 160);
+          }
           window.location.href = redirectTo || "/";
         } catch (error) {
           console.error("Login error:", error);
+          if (window.Loader && typeof window.Loader.hide === 'function') window.Loader.hide();
           errorContainer.innerHTML =
             '<div class="alert alert-error">An error occurred. Please try again.</div>';
         }

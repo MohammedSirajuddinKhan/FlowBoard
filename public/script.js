@@ -35,22 +35,30 @@ const lineageTitle = document.getElementById("lineageTitle");
 const lineageSummary = document.getElementById("lineageSummary");
 const lineageList = document.getElementById("lineageList");
 const crewStatus = document.getElementById("crewStatus");
-const bossCrewList = document.getElementById("bossCrewList");
-const riderCrewList = document.getElementById("riderCrewList");
-const watcherCrewList = document.getElementById("watcherCrewList");
-const bossCount = document.getElementById("bossCount");
-const riderCount = document.getElementById("riderCount");
-const watcherCount = document.getElementById("watcherCount");
-const inviteCode = document.getElementById("inviteCode");
+const crewMembersList = document.getElementById("crewMembersList");
 const inviteLink = document.getElementById("inviteLink");
 const copyInviteBtn = document.getElementById("copyInviteBtn");
 const memberTotal = document.getElementById("memberTotal");
 const currentRoleLabel = document.getElementById("currentRoleLabel");
 const crewRoomName = document.getElementById("crewRoomName");
+const roomDisplayName = document.getElementById("roomDisplayName");
 const livePresence = document.getElementById("livePresence");
+const presenceDot = document.getElementById("presenceDot");
 const realtimeToast = document.getElementById("realtimeToast");
 
 const flowboardState = window.__FLOWBOARD__ || {};
+const presencePalette = [
+  "#006466",
+  "#065A60",
+  "#0B525B",
+  "#144552",
+  "#1B3A4B",
+  "#212F45",
+  "#272640",
+  "#312244",
+  "#3E1F47",
+  "#4D194D",
+];
 let roomContext = flowboardState.room || null;
 let currentRoomRole = flowboardState.roomRole || null;
 let socketClient =
@@ -69,6 +77,8 @@ let syncReloadTimer = null;
 let toastTimer = null;
 let isDeployingCrew = false;
 let realtimeBound = false;
+let presenceTimer = null;
+let pendingTaskTransfer = null;
 
 // Initialize
 document.addEventListener("DOMContentLoaded", () => {
@@ -95,6 +105,10 @@ function ensureSocketClient() {
 // Load tasks from API
 async function loadTasks() {
   try {
+    // show global loader during initial data fetch
+    if (window.Loader && typeof window.Loader.show === "function") {
+      window.Loader.show();
+    }
     const response = await fetch(getTaskApiBase());
     if (!response.ok) throw new Error("Failed to load tasks");
     allTasks = await response.json();
@@ -102,6 +116,10 @@ async function loadTasks() {
   } catch (error) {
     console.error("Load tasks error:", error);
     alert("Failed to load tasks. Please refresh the page.");
+  } finally {
+    if (window.Loader && typeof window.Loader.hide === "function") {
+      window.Loader.hide();
+    }
   }
 }
 
@@ -148,12 +166,12 @@ function updateRoomBadge() {
     roleBadge.className = `role-pill role-${currentRoomRole}`;
   }
 
-  if (inviteCode && roomContext?.roomCode) {
-    inviteCode.textContent = roomContext.roomCode;
-  }
-
   if (inviteLink) {
     inviteLink.value = getInviteLink();
+  }
+
+  if (roomDisplayName) {
+    roomDisplayName.textContent = roomContext?.name || "";
   }
 
   if (crewRoomName) {
@@ -300,7 +318,23 @@ function updatePresenceBadge(onlineCount) {
   if (!livePresence) return;
 
   const count = Number.isFinite(Number(onlineCount)) ? Number(onlineCount) : 0;
-  livePresence.textContent = `Live ${count}`;
+  livePresence.textContent = `${count} online`;
+
+  if (presenceDot) {
+    setPresenceDotColor();
+
+    if (!presenceTimer) {
+      presenceTimer = setInterval(setPresenceDotColor, 1000);
+    }
+  }
+}
+
+function setPresenceDotColor() {
+  if (!presenceDot) return;
+
+  const nextColor =
+    presencePalette[Math.floor(Math.random() * presencePalette.length)];
+  presenceDot.style.setProperty("--presence-color", nextColor);
 }
 
 function showRealtimeToast(message, kind = "info") {
@@ -423,34 +457,11 @@ function closeLineageModal() {
   selectedLineageEntries = [];
 }
 
-function getMemberInitials(email) {
-  const source = String(email || "user");
-  const localPart = source.includes("@") ? source.split("@")[0] : source;
-  const parts = localPart
-    .replace(/[^a-zA-Z0-9 ]/g, " ")
-    .trim()
-    .split(/\s+/)
-    .filter(Boolean);
-
-  if (parts.length === 0) return "FB";
-  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
-
-  return `${parts[0][0]}${parts[1][0]}`.toUpperCase();
-}
-
 function setCrewStatus(message, isError = false) {
   if (!crewStatus) return;
 
   crewStatus.textContent = message;
   crewStatus.classList.toggle("error", Boolean(isError));
-}
-
-function groupMembersByRole() {
-  return {
-    boss: roomMembers.filter((member) => member.role === "boss"),
-    rider: roomMembers.filter((member) => member.role === "rider"),
-    watcher: roomMembers.filter((member) => member.role === "watcher"),
-  };
 }
 
 function getNonBossMembers() {
@@ -460,7 +471,18 @@ function getNonBossMembers() {
 function renderCrewModal() {
   if (!crewModal) return;
 
-  const groups = groupMembersByRole();
+  const members = [...roomMembers].sort((left, right) => {
+    const roleOrder = { boss: 0, rider: 1, watcher: 2 };
+    const leftRank = roleOrder[left.role] ?? 99;
+    const rightRank = roleOrder[right.role] ?? 99;
+
+    if (leftRank !== rightRank) {
+      return leftRank - rightRank;
+    }
+
+    return new Date(left.joinedAt) - new Date(right.joinedAt);
+  });
+
   if (memberTotal) {
     memberTotal.textContent = String(roomMembers.length || 0);
   }
@@ -476,132 +498,89 @@ function renderCrewModal() {
     crewRoomName.textContent = roomContext?.name || "No Room Deployed";
   }
 
-  bossCount.textContent = String(groups.boss.length);
-  riderCount.textContent = String(groups.rider.length);
-  watcherCount.textContent = String(groups.watcher.length);
+  if (crewMembersList) {
+    crewMembersList.innerHTML = members.length
+      ? members.map((member) => createCrewMemberMarkup(member)).join("")
+      : '<div class="crew-empty">No members in this room yet.</div>';
 
-  renderCrewList(bossCrewList, groups.boss, true);
-  renderCrewList(riderCrewList, groups.rider, false);
-  renderCrewList(watcherCrewList, groups.watcher, false);
+    members.forEach((member) => {
+      const root = crewMembersList.querySelector(
+        `[data-member-id="${member.id}"]`,
+      );
+      if (!root) return;
+
+      const riderToggle = root.querySelector(`[data-role-toggle="rider"]`);
+      const watcherToggle = root.querySelector(`[data-role-toggle="watcher"]`);
+
+      if (member.role === "boss") {
+        return;
+      }
+
+      const initialRole = crewDraftRoles.get(member.id) || member.role;
+
+      if (riderToggle && watcherToggle) {
+        riderToggle.checked = initialRole === "rider";
+        watcherToggle.checked = initialRole === "watcher";
+
+        const syncRoleSelection = (nextRole) => {
+          crewDraftRoles.set(member.id, nextRole);
+          riderToggle.checked = nextRole === "rider";
+          watcherToggle.checked = nextRole === "watcher";
+        };
+
+        riderToggle.addEventListener("change", () => {
+          if (riderToggle.checked) {
+            syncRoleSelection("rider");
+          } else if (!watcherToggle.checked) {
+            syncRoleSelection("watcher");
+          }
+        });
+
+        watcherToggle.addEventListener("change", () => {
+          if (watcherToggle.checked) {
+            syncRoleSelection("watcher");
+          } else if (!riderToggle.checked) {
+            syncRoleSelection("rider");
+          }
+        });
+      }
+    });
+  }
 
   if (deployCrewBtn) {
     deployCrewBtn.disabled = currentRoomRole !== "boss";
     deployCrewBtn.textContent =
-      currentRoomRole === "boss" ? "Deploy Changes" : "Read Only";
+      currentRoomRole === "boss" ? "Deply Changes" : "Read Only";
   }
 }
 
-function renderCrewList(container, members, isBossGroup) {
-  if (!container) return;
-
-  if (!members.length) {
-    container.innerHTML =
-      '<div class="crew-empty">No members in this group.</div>';
-    return;
-  }
-
-  container.innerHTML = members
-    .map((member) => createCrewMemberMarkup(member, isBossGroup))
-    .join("");
-
-  members.forEach((member) => {
-    const root = container.querySelector(`[data-member-id="${member.id}"]`);
-    if (!root) return;
-
-    const riderToggle = root.querySelector(`[data-role-toggle="rider"]`);
-    const watcherToggle = root.querySelector(`[data-role-toggle="watcher"]`);
-    const removeBtn = root.querySelector(`[data-action="remove"]`);
-    const handoverBtn = root.querySelector(`[data-action="handover"]`);
-
-    if (isBossGroup) {
-      if (riderToggle) riderToggle.disabled = true;
-      if (watcherToggle) watcherToggle.disabled = true;
-      if (removeBtn) removeBtn.remove();
-      if (handoverBtn) handoverBtn.remove();
-      return;
-    }
-
-    const initialRole = crewDraftRoles.get(member.id) || member.role;
-    if (riderToggle && watcherToggle) {
-      riderToggle.checked = initialRole === "rider";
-      watcherToggle.checked = initialRole !== "rider";
-
-      const syncRoleSelection = (nextRole) => {
-        crewDraftRoles.set(member.id, nextRole);
-        riderToggle.checked = nextRole === "rider";
-        watcherToggle.checked = nextRole === "watcher";
-      };
-
-      riderToggle.addEventListener("change", () => {
-        if (riderToggle.checked) {
-          syncRoleSelection("rider");
-        } else if (!watcherToggle.checked) {
-          syncRoleSelection("watcher");
-        }
-      });
-
-      watcherToggle.addEventListener("change", () => {
-        if (watcherToggle.checked) {
-          syncRoleSelection("watcher");
-        } else if (!riderToggle.checked) {
-          syncRoleSelection("rider");
-        }
-      });
-    }
-
-    if (removeBtn) {
-      removeBtn.addEventListener("click", () => removeCrewMember(member));
-    }
-
-    if (handoverBtn) {
-      handoverBtn.addEventListener("click", () => handoverCrewRole(member));
-    }
-  });
-}
-
-function createCrewMemberMarkup(member, isBossGroup) {
+function createCrewMemberMarkup(member) {
   const email = escapeHtml(member.user?.email || "member@flowboard");
   const roleClass = `role-${member.role}`;
   const roleLabel = escapeHtml(member.roleLabel || getRoleLabel(member.role));
-  const initials = escapeHtml(getMemberInitials(member.user?.email));
-  const isBoss = member.role === "boss" || isBossGroup;
-  const disabledAttr = currentRoomRole !== "boss" ? "disabled" : "";
+  const isBoss = member.role === "boss";
+  const disabledAttr = currentRoomRole !== "boss" || isBoss ? "disabled" : "";
   const currentSelection = crewDraftRoles.get(member.id) || member.role;
 
   return `
-    <article class="crew-member" data-member-id="${member.id}">
-      <div class="crew-avatar">${initials}</div>
-      <div class="crew-member-main">
-        <div class="crew-member-top">
-          <strong>${email}</strong>
-          <span class="crew-role-badge ${roleClass}">${roleLabel}</span>
-        </div>
-        <div class="crew-powers">
-          <div class="crew-toggle-row crew-toggle-rider">
-            <label>
-              <input type="checkbox" data-role-toggle="rider" ${currentSelection === "rider" ? "checked" : ""} ${isBoss ? "disabled" : disabledAttr} />
-              Rider
-            </label>
-          </div>
-          <div class="crew-toggle-row crew-toggle-watcher">
-            <label>
-              <input type="checkbox" data-role-toggle="watcher" ${currentSelection === "watcher" ? "checked" : ""} ${isBoss ? "disabled" : disabledAttr} />
-              Watcher
-            </label>
-          </div>
-        </div>
-        ${
-          currentRoomRole === "boss" && !isBoss
-            ? `
-        <div class="crew-actions">
-          <button type="button" class="crew-action-btn crew-action-remove" data-action="remove">Remove</button>
-          <button type="button" class="crew-action-btn crew-action-handover" data-action="handover">Handover</button>
-        </div>
-        `
-            : ""
-        }
+    <div class="crew-table-row" data-member-id="${member.id}">
+      <div class="crew-cell crew-cell-name">
+        <strong>${email}</strong>
       </div>
-    </article>
+      <div class="crew-cell crew-cell-role">
+        <span class="crew-role-badge ${roleClass}">${roleLabel}</span>
+      </div>
+      <div class="crew-cell crew-cell-powers">
+        <label class="crew-power-option">
+          <input type="checkbox" data-role-toggle="rider" ${currentSelection === "rider" ? "checked" : ""} ${disabledAttr} />
+          Rider
+        </label>
+        <label class="crew-power-option">
+          <input type="checkbox" data-role-toggle="watcher" ${currentSelection === "watcher" ? "checked" : ""} ${disabledAttr} />
+          Watcher
+        </label>
+      </div>
+    </div>
   `;
 }
 
@@ -822,86 +801,6 @@ async function deployCrewChanges() {
   }
 }
 
-async function removeCrewMember(member) {
-  if (currentRoomRole !== "boss") {
-    setCrewStatus("Only the Flow Boss can remove members.", true);
-    return;
-  }
-
-  if (!confirm(`Remove ${member.user?.email || "this member"} from the room?`))
-    return;
-
-  try {
-    const response = await fetch(
-      `/api/rooms/${roomContext.roomCode}/crew/${member.id}`,
-      {
-        method: "DELETE",
-      },
-    );
-
-    const data = await response.json();
-
-    if (!response.ok) {
-      throw new Error(data.error || "Failed to remove member");
-    }
-
-    roomMembers = Array.isArray(data.members) ? data.members : [];
-    crewDraftRoles = new Map(
-      roomMembers
-        .filter((entry) => entry.role !== "boss")
-        .map((entry) => [entry.id, entry.role]),
-    );
-    renderCrewModal();
-    setCrewStatus("Member removed.", false);
-  } catch (error) {
-    console.error("Remove crew member error:", error);
-    setCrewStatus(error.message || "Failed to remove member.", true);
-  }
-}
-
-async function handoverCrewRole(member) {
-  if (currentRoomRole !== "boss") {
-    setCrewStatus("Only the Flow Boss can hand over ownership.", true);
-    return;
-  }
-
-  if (
-    !confirm(`Hand over Flow Boss to ${member.user?.email || "this member"}?`)
-  )
-    return;
-
-  try {
-    const response = await fetch(
-      `/api/rooms/${roomContext.roomCode}/handover`,
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ memberId: member.id }),
-      },
-    );
-
-    const data = await response.json();
-
-    if (!response.ok) {
-      throw new Error(data.error || "Failed to hand over ownership");
-    }
-
-    roomMembers = Array.isArray(data.members) ? data.members : [];
-    crewDraftRoles = new Map(
-      roomMembers
-        .filter((entry) => entry.role !== "boss")
-        .map((entry) => [entry.id, entry.role]),
-    );
-    currentRoomRole = "rider";
-    updateRoomBadge();
-    renderCrewModal();
-    setCrewStatus("Flow Boss handover complete.", false);
-  } catch (error) {
-    console.error("Handover crew role error:", error);
-    setCrewStatus(error.message || "Failed to hand over ownership.", true);
-  }
-}
-
 // Render tasks on the board
 function renderTasks() {
   // Clear all columns
@@ -931,6 +830,12 @@ function renderTasks() {
 
     tasks.forEach((task, index) => {
       const taskEl = createTaskElement(task);
+      if (
+        pendingTaskTransfer?.taskId === task._id &&
+        pendingTaskTransfer?.toColumn === column
+      ) {
+        taskEl.classList.add("task-transfer-arrive");
+      }
       container.appendChild(taskEl);
     });
 
@@ -941,6 +846,11 @@ function renderTasks() {
 
   // Reattach drag listeners
   attachDragListeners();
+
+  if (pendingTaskTransfer) {
+    animateTaskTransfer(pendingTaskTransfer);
+    pendingTaskTransfer = null;
+  }
 }
 
 // Create task element
@@ -968,7 +878,6 @@ function createTaskElement(task) {
 
   taskEl.innerHTML = `
     <div class="task-title-row">
-      <span class="task-column-icon" aria-hidden="true">${getTaskColumnIcon(task.column)}</span>
       <h3>${escapeHtml(task.title)}</h3>
       ${task.column === "done" ? '<span class="task-done-icon">✓</span>' : ""}
     </div>
@@ -1002,8 +911,6 @@ function escapeHtml(text) {
 }
 
 function getTaskColumnIcon(column) {
-  if (column === "todo") return "💡";
-  if (column === "progress") return "⏳";
   return "";
 }
 
@@ -1182,6 +1089,8 @@ async function handleDrop(e) {
   const taskId = draggedElement.dataset.taskId;
   const newColumn = this.id;
   const taskContainer = this.querySelector(".tasks");
+  const sourceColumn = draggedElement.dataset.column;
+  const sourceRect = draggedElement.getBoundingClientRect();
 
   // Update task's column
   const taskIndex = allTasks.findIndex((t) => t._id === taskId);
@@ -1203,11 +1112,100 @@ async function handleDrop(e) {
       }),
     });
 
+    pendingTaskTransfer = {
+      taskId,
+      fromRect: sourceRect,
+      fromColumn: sourceColumn,
+      toColumn: newColumn,
+    };
+
     renderTasks();
   } catch (error) {
     console.error("Update task position error:", error);
     alert("Failed to update task position. Please refresh the page.");
   }
+}
+
+function animateTaskTransfer(transfer) {
+  if (!transfer?.fromRect) return;
+
+  const target = document.querySelector(`[data-task-id="${transfer.taskId}"]`);
+
+  if (!target) return;
+
+  const targetRect = target.getBoundingClientRect();
+  const clone = target.cloneNode(true);
+  const fromColumnIndex = getTaskColumnIndex(transfer.fromColumn);
+  const toColumnIndex = getTaskColumnIndex(transfer.toColumn);
+  const direction = toColumnIndex >= fromColumnIndex ? 1 : -1;
+  const horizontalDistance = Math.max(
+    96,
+    Math.abs(targetRect.left - transfer.fromRect.left),
+  );
+  const settleX = targetRect.left - transfer.fromRect.left;
+  const settleY = targetRect.top - transfer.fromRect.top;
+  const liftY = -10;
+
+  clone.classList.add("task-transfer-clone");
+  clone.style.position = "fixed";
+  clone.style.left = `${transfer.fromRect.left}px`;
+  clone.style.top = `${transfer.fromRect.top}px`;
+  clone.style.width = `${transfer.fromRect.width}px`;
+  clone.style.height = `${transfer.fromRect.height}px`;
+  clone.style.margin = "0";
+  clone.style.pointerEvents = "none";
+  clone.style.zIndex = "2000";
+  clone.style.transform = "translate(0, 0) scale(1)";
+  clone.style.transition = "none";
+
+  document.body.appendChild(clone);
+
+  target.classList.add("task-transfer-arrive");
+
+  requestAnimationFrame(() => {
+    clone.animate(
+      [
+        {
+          transform: "translate(0, 0) scale(1)",
+          opacity: 0.98,
+          filter: "blur(0px)",
+        },
+        {
+          transform: `translate(${direction * (horizontalDistance * 0.6)}px, ${liftY}px) scale(0.97)`,
+          opacity: 0.9,
+          filter: "blur(0px)",
+        },
+        {
+          transform: `translate(${settleX}px, ${settleY}px) scale(0.95)`,
+          opacity: 0,
+          filter: "blur(1px)",
+        },
+      ],
+      {
+        duration: 560,
+        easing: "cubic-bezier(0.2, 0.85, 0.2, 1)",
+        fill: "forwards",
+      },
+    ).onfinish = () => clone.remove();
+
+    target.animate(
+      [
+        { transform: "translateY(10px) scale(0.98)", opacity: 0.55 },
+        { transform: "translateY(0) scale(1)", opacity: 1 },
+      ],
+      {
+        duration: 420,
+        easing: "cubic-bezier(0.2, 0.85, 0.2, 1)",
+      },
+    );
+  });
+}
+
+function getTaskColumnIndex(column) {
+  if (column === "todo") return 0;
+  if (column === "progress") return 1;
+  if (column === "done") return 2;
+  return 0;
 }
 
 async function viewTaskLineage(task) {

@@ -259,7 +259,7 @@ export const updateCrewRoles = async (req, res) => {
       if (member.role === "boss") {
         return res
           .status(400)
-          .json({ error: "Use handover to change the Flow Boss" });
+          .json({ error: "The Flow Boss role cannot be changed" });
       }
 
       member.role = nextRole;
@@ -299,9 +299,7 @@ export const removeCrewMember = async (req, res) => {
     }
 
     if (member.role === "boss") {
-      return res
-        .status(400)
-        .json({ error: "Use handover before removing the Flow Boss" });
+      return res.status(400).json({ error: "The Flow Boss cannot be removed" });
     }
 
     await RoomMember.deleteOne({ _id: member._id });
@@ -321,71 +319,6 @@ export const removeCrewMember = async (req, res) => {
   } catch (error) {
     console.error("Remove crew member error:", error);
     return res.status(500).json({ error: "Failed to remove crew member" });
-  }
-};
-
-export const handoverCrewRole = async (req, res) => {
-  try {
-    if (req.roomRole !== "boss") {
-      return res
-        .status(403)
-        .json({ error: "Only the Flow Boss can hand over ownership" });
-    }
-
-    const nextBossId = String(req.body.memberId || "").trim();
-
-    if (!nextBossId) {
-      return res.status(400).json({ error: "A target member is required" });
-    }
-
-    const nextBoss = await RoomMember.findById(nextBossId);
-
-    if (!nextBoss || nextBoss.room.toString() !== req.room._id.toString()) {
-      return res.status(404).json({ error: "Crew member not found" });
-    }
-
-    if (nextBoss.role === "boss") {
-      return res
-        .status(400)
-        .json({ error: "This member is already the Flow Boss" });
-    }
-
-    const currentBoss = await RoomMember.findOne({
-      room: req.room._id,
-      role: "boss",
-    });
-
-    if (!currentBoss) {
-      return res.status(500).json({ error: "Current Flow Boss not found" });
-    }
-
-    currentBoss.role = "rider";
-    nextBoss.role = "boss";
-
-    await currentBoss.save();
-    await nextBoss.save();
-    await refreshRoomOwner(req.room);
-
-    const updatedMembers = await RoomMember.find({ room: req.room._id })
-      .populate("user", "email")
-      .sort({ joinedAt: 1 });
-
-    emitRoomSync(req, {
-      action: "handover-complete",
-    });
-
-    return res.status(200).json({
-      message: "Flow Boss handover complete",
-      room: {
-        id: req.room._id,
-        name: req.room.name,
-        roomCode: req.room.roomCode,
-      },
-      members: updatedMembers.map(buildMemberPayload),
-    });
-  } catch (error) {
-    console.error("Handover crew role error:", error);
-    return res.status(500).json({ error: "Failed to transfer ownership" });
   }
 };
 

@@ -13,7 +13,6 @@ import {
   deleteRoom,
   getRoomDetails,
   joinRoom,
-  handoverCrewRole,
   removeCrewMember,
   renderRoom,
   updateCrewRoles,
@@ -92,13 +91,6 @@ router.delete(
   requireRoomMembership,
   requireRoomRole("boss"),
   removeCrewMember,
-);
-router.post(
-  "/api/rooms/:roomCode/handover",
-  authMiddleware,
-  requireRoomMembership,
-  requireRoomRole("boss"),
-  handoverCrewRole,
 );
 router.delete(
   "/api/rooms/:roomCode",

@@ -74,7 +74,11 @@ A collaborative Kanban board with user authentication, task management, and pers
 
 ```
 FlowBoard/
+├── app.js                  # Shared Express app for local + Vercel
+├── api/
+│   └── index.js            # Vercel serverless entrypoint
 ├── server.js                 # Express server entry point
+├── vercel.json              # Vercel routing + bundled static files
 ├── .env                      # Environment variables
 ├── package.json              # Dependencies
 │
@@ -163,12 +167,18 @@ NODE_ENV=production
 
 Compatible with:
 
-- Vercel (with serverless modifications)
+- Vercel
 - Railway
 - Render
 - Heroku
 - AWS EC2
 - DigitalOcean
+
+### Vercel Notes
+
+- Set `MONGODB_URI` and `SESSION_SECRET` in the Vercel project environment settings.
+- The app routes all requests through the serverless Express entrypoint defined in `api/index.js`.
+- Socket.IO remains available for local development through `server.js`; Vercel itself does not provide a long-lived WebSocket server.
 
 ## License
 
